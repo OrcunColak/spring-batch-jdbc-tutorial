@@ -1,6 +1,6 @@
 package com.colak.springtutorial.config;
 
-import com.colak.springtutorial.jpa.Person;
+import com.colak.springtutorial.model.Person;
 import lombok.RequiredArgsConstructor;
 import org.springframework.batch.core.Job;
 import org.springframework.batch.core.Step;
@@ -9,70 +9,60 @@ import org.springframework.batch.core.repository.JobRepository;
 import org.springframework.batch.core.step.builder.StepBuilder;
 import org.springframework.batch.item.database.BeanPropertyItemSqlParameterSourceProvider;
 import org.springframework.batch.item.database.JdbcBatchItemWriter;
-import org.springframework.batch.item.database.JdbcPagingItemReader;
-import org.springframework.batch.item.database.Order;
-import org.springframework.batch.item.database.support.H2PagingQueryProvider;
+import org.springframework.batch.item.database.JdbcCursorItemReader;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.BeanPropertyRowMapper;
 import org.springframework.transaction.PlatformTransactionManager;
 
 import javax.sql.DataSource;
-import java.util.Collections;
 
 @Configuration
 @RequiredArgsConstructor
-public class PagingBatchConfig {
+public class CursorReaderBatchConfig {
 
     private final DataSource dataSource;
 
     @Bean
-    public Job job(JobRepository jobRepository, Step step) {
-        return new JobBuilder("job", jobRepository)
-                .start(step)
+    public Job cursorJob(JobRepository jobRepository, Step cursorStep) {
+        return new JobBuilder("cursor-job", jobRepository)
+                .start(cursorStep)
                 .build();
     }
 
     @Bean
-    public Step step(
+    public Step cursorStep(
             JobRepository jobRepository,
             PlatformTransactionManager transactionManager,
-            JdbcPagingItemReader<Person> reader,
-            JdbcBatchItemWriter<Person> writer) {
+            JdbcCursorItemReader<Person> cursorReader,
+            JdbcBatchItemWriter<Person> writer2) {
 
-        return new StepBuilder("step", jobRepository)
+        return new StepBuilder("cursor-step", jobRepository)
                 .<Person, Person>chunk(10, transactionManager)
-                .reader(reader)
+                .reader(cursorReader)
                 .processor(person -> {
                     person.setName(person.getName().toUpperCase()); // Transform the name
                     return person;
                 })
-                .writer(writer)
+                .writer(writer2)
                 .build();
     }
 
     @Bean
-    public JdbcPagingItemReader<Person> reader() {
-        JdbcPagingItemReader<Person> reader = new JdbcPagingItemReader<>();
+    public JdbcCursorItemReader<Person> cursorReader() {
+        JdbcCursorItemReader<Person> reader = new JdbcCursorItemReader<>();
         reader.setDataSource(dataSource);
-        reader.setPageSize(10);
+        reader.setSql("SELECT id, name, age FROM PERSON"); // SQL query to fetch data
         reader.setRowMapper(new BeanPropertyRowMapper<>(Person.class));
-
-        H2PagingQueryProvider queryProvider = new H2PagingQueryProvider();
-        queryProvider.setSelectClause("SELECT id, name, age");
-        queryProvider.setFromClause("FROM PERSON");
-        queryProvider.setSortKeys(Collections.singletonMap("id", Order.ASCENDING));
-
-        reader.setQueryProvider(queryProvider);
 
         return reader;
     }
 
     @Bean
-    public JdbcBatchItemWriter<Person> writer() {
+    public JdbcBatchItemWriter<Person> writer2() {
         JdbcBatchItemWriter<Person> writer = new JdbcBatchItemWriter<>();
         writer.setDataSource(dataSource);
-        writer.setSql("INSERT INTO person_processed (id, name, age) VALUES (:id, :name, :age)");
+        writer.setSql("INSERT INTO person_processed2 (id, name, age) VALUES (:id, :name, :age)");
         writer.setItemSqlParameterSourceProvider(new BeanPropertyItemSqlParameterSourceProvider<>());
         return writer;
     }
